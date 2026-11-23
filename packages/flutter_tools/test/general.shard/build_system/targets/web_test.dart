@@ -15,6 +15,7 @@ import 'package:flutter_tools/src/base/template.dart';
 import 'package:flutter_tools/src/build_info.dart';
 import 'package:flutter_tools/src/build_system/build_system.dart';
 import 'package:flutter_tools/src/build_system/depfile.dart';
+import 'package:flutter_tools/src/build_system/targets/native_assets.dart';
 import 'package:flutter_tools/src/build_system/targets/web.dart';
 import 'package:flutter_tools/src/convert.dart';
 import 'package:flutter_tools/src/dart/pub.dart';
@@ -3377,6 +3378,60 @@ _flutter.loader.load({
       expect(updated, contains('_flutter.loader.load({'));
     }),
   );
+
+  for (final (List<WebCompilerConfig> configs, List<String> expected) in const [
+    (<WebCompilerConfig>[WasmCompilerConfig()], <String>[LinkHooks.recordedUsesWasmFileName]),
+    (
+      <WebCompilerConfig>[WasmCompilerConfig(), JsCompilerConfig()],
+      <String>[LinkHooks.recordedUsesWasmFileName, LinkHooks.recordedUsesJsFileName],
+    ),
+    (
+      <WebCompilerConfig>[JsCompilerConfig(), WasmCompilerConfig(dryRun: true)],
+      <String>[LinkHooks.recordedUsesJsFileName],
+    ),
+  ]) {
+    test('Web link and bundle inputs track only the active recorded uses files $expected', () {
+      return testbed.run(() {
+        final bundle = WebReleaseBundle(
+          configs,
+          const NoOpAnalytics(),
+          engineRevision: _kEngineRevision,
+        );
+        final LinkHooks linkHooks = bundle.dependencies.whereType<LinkHooks>().single;
+        Iterable<String> recordedUsesNames(Iterable<File> files) => files
+            .map((File file) => file.basename)
+            .where((String name) => name.startsWith('recorded_uses_'));
+
+        expect(recordedUsesNames(linkHooks.resolveInputs(environment).sources), expected);
+        expect(recordedUsesNames(bundle.resolveInputs(environment).sources), expected);
+        expect(recordedUsesNames(bundle.resolveOutputs(environment).sources), isEmpty);
+      });
+    });
+  }
+
+  test('Wasm builds track the loader map when it exists and always require the Wasm map', () {
+    return testbed.run(() {
+      final bundle = WebReleaseBundle(
+        const <WebCompilerConfig>[WasmCompilerConfig()],
+        const NoOpAnalytics(),
+        engineRevision: _kEngineRevision,
+      );
+      final Dart2WebTarget compiler = bundle.compileTargets.single;
+      final File loaderMap = environment.buildDir.childFile('main.dart.mjs.map');
+      final File wasmMap = environment.buildDir.childFile('main.dart.wasm.map');
+
+      Iterable<String> paths(Iterable<File> files) => files.map((File file) => file.path);
+
+      expect(paths(compiler.resolveOutputs(environment).sources), contains(wasmMap.path));
+      expect(paths(compiler.resolveOutputs(environment).sources), isNot(contains(loaderMap.path)));
+      expect(paths(bundle.resolveInputs(environment).sources), isNot(contains(loaderMap.path)));
+
+      loaderMap.createSync();
+
+      expect(paths(compiler.resolveOutputs(environment).sources), contains(loaderMap.path));
+      expect(paths(bundle.resolveInputs(environment).sources), contains(loaderMap.path));
+    });
+  });
 
   test(
     'WebReleaseBundle includes templated index.html and flutter_bootstrap.js in inputs and outputs only when webContentHash is true',
