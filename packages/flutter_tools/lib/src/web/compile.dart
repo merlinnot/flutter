@@ -32,7 +32,7 @@ export 'compiler_config.dart';
 /// Whether the application has web plugins.
 const kHasWebPlugins = 'HasWebPlugins';
 
-/// Gives Wasm-only builds a build directory separate from the JavaScript fallback.
+/// Distinguishes Wasm-only builds from dual builds in the build cache.
 const kWebWasmOnly = 'WebWasmOnly';
 
 /// Base href to set in index.html in flutter build command

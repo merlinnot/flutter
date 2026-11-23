@@ -109,22 +109,19 @@ class BuildWebCommand extends BuildSubCommand {
   $kWasmMoreInfo''');
     }
 
-    final bool wasmDryRun = !useWasm && getValue(WebOptions.wasmDryRun);
-    final WasmCompilerConfig? wasmConfig = useWasm || wasmDryRun
-        ? WasmCompilerConfig(
-            optimizationLevel: optimizationLevel,
-            stripWasm: getValue(WebOptions.stripWasm),
-            sourceMaps: sourceMaps,
-            webContentHash: webContentHash,
-            minify: minifyWasm,
-            enableWasmDeferredLoading: getValue(WebOptions.enableWasmDeferredLoading),
-            dryRun: wasmDryRun,
-            // dart2js already reports deprecated JS interop imports as errors.
-            omitDeprecatedJsInteropFindings: wasmDryRun && deprecatedJsInterop == false,
-          )
-        : null;
+    WasmCompilerConfig wasmConfig({required bool dryRun}) => WasmCompilerConfig(
+      optimizationLevel: optimizationLevel,
+      stripWasm: getValue(WebOptions.stripWasm),
+      sourceMaps: sourceMaps,
+      webContentHash: webContentHash,
+      minify: minifyWasm,
+      enableWasmDeferredLoading: getValue(WebOptions.enableWasmDeferredLoading),
+      dryRun: dryRun,
+      // dart2js already reports deprecated JS interop imports as errors.
+      omitDeprecatedJsInteropFindings: dryRun && deprecatedJsInterop == false,
+    );
     final compilerConfigs = <WebCompilerConfig>[
-      if (useWasm) ?wasmConfig,
+      if (useWasm) wasmConfig(dryRun: false),
       if (!wasmOnly)
         JsCompilerConfig(
           csp: getValue(WebOptions.csp),
@@ -138,7 +135,7 @@ class BuildWebCommand extends BuildSubCommand {
           deprecatedJsInterop: deprecatedJsInterop,
           renderer: useWasm ? WebRendererMode.defaultForJs : webRenderer,
         ),
-      if (wasmDryRun) ?wasmConfig,
+      if (!useWasm && getValue(WebOptions.wasmDryRun)) wasmConfig(dryRun: true),
     ];
 
     final BuildInfo buildInfo = await getBuildInfo();
