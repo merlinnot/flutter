@@ -179,6 +179,13 @@ abstract class Dart2WebTarget extends Target {
   Iterable<File> buildFiles(Environment environment);
   Iterable<String> get buildPatternStems;
 
+  /// The recorded uses file produced for linking and icon tree shaking, if any.
+  String? get recordedUsesFileName;
+
+  // dart2wasm can emit its loader without a source map.
+  static Source _artifactSource(String directory, String filename) =>
+      Source.pattern('$directory/$filename', optional: filename == 'main.dart.mjs.map');
+
   List<String> computeDartDefines(Environment environment) {
     final List<String> dartDefines = compilerConfig.renderer.updateDartDefines(
       decodeDartDefines(environment.defines, kDartDefines),
@@ -212,7 +219,9 @@ abstract class Dart2WebTarget extends Target {
 
   @override
   List<Source> get outputs => <Source>[
-    for (final String stem in buildPatternStems) Source.pattern('{BUILD_DIR}/$stem'),
+    for (final String stem in buildPatternStems) _artifactSource('{BUILD_DIR}', stem),
+    if (featureFlags.isRecordUseEnabled)
+      if (recordedUsesFileName case final String name) Source.pattern('{BUILD_DIR}/$name'),
   ];
 
   @override
@@ -281,6 +290,9 @@ class Dart2JSTarget extends Dart2WebTarget {
 
   @override
   String get name => 'dart2js';
+
+  @override
+  String get recordedUsesFileName => LinkHooks.recordedUsesJsFileName;
 
   @override
   List<String> get depfiles => const <String>['dart2js.d'];
@@ -355,7 +367,7 @@ class Dart2JSTarget extends Dart2WebTarget {
     ]);
 
     final File resourcesFile = environment.buildDir.childFile('main.dart.js.resources.json');
-    final File recordedUsesFile = environment.buildDir.childFile(LinkHooks.recordedUsesJsFileName);
+    final File recordedUsesFile = environment.buildDir.childFile(recordedUsesFileName);
     if (resourcesFile.existsSync()) {
       resourcesFile.renameSync(recordedUsesFile.path);
     } else if (featureFlags.isRecordUseEnabled) {
@@ -480,7 +492,6 @@ class Dart2JSTarget extends Dart2WebTarget {
       if (compilerConfig.webContentHash) 'main.dart.*.js.map' else 'main.dart.js.map',
       'main.dart.js_*.part.js.map',
     ],
-    if (featureFlags.isRecordUseEnabled) LinkHooks.recordedUsesJsFileName,
   ];
 }
 
@@ -665,6 +676,10 @@ class Dart2WasmTarget extends Dart2WebTarget {
   String get name => 'dart2wasm';
 
   @override
+  String? get recordedUsesFileName =>
+      compilerConfig.dryRun ? null : LinkHooks.recordedUsesWasmFileName;
+
+  @override
   List<String> get depfiles => const <String>['dart2wasm.d'];
 
   @override
@@ -744,7 +759,6 @@ class Dart2WasmTarget extends Dart2WebTarget {
             if (compilerConfig.webContentHash) 'main.dart.*.mjs.map' else 'main.dart.mjs.map',
             'main.dart_module*.wasm.map',
           ],
-          if (featureFlags.isRecordUseEnabled) LinkHooks.recordedUsesWasmFileName,
         ];
 
   @visibleForTesting
@@ -1160,7 +1174,15 @@ class WebReleaseBundle extends Target {
   List<Target> get dependencies => <Target>[
     ...compileTargets,
     templatedFilesTarget,
-    LinkHooks(platform: HookPlatform.web, extraDependencies: compileTargets),
+    LinkHooks(
+      platform: HookPlatform.web,
+      extraDependencies: compileTargets,
+      webRecordedUsesFileNames: _recordedUsesFileNames,
+    ),
+  ];
+
+  List<String> get _recordedUsesFileNames => <String>[
+    for (final Dart2WebTarget target in compileTargets) ?target.recordedUsesFileName,
   ];
 
   Iterable<String> get buildPatternStems =>
@@ -1173,7 +1195,10 @@ class WebReleaseBundle extends Target {
   List<Source> get inputs => <Source>[
     const Source.pattern('{PROJECT_DIR}/pubspec.yaml'),
     const Source.pattern('{BUILD_DIR}/${LinkHooks.resultFilename}'),
-    ...buildPatternStems.map((String file) => Source.pattern('{BUILD_DIR}/$file')),
+    for (final String stem in buildPatternStems)
+      Dart2WebTarget._artifactSource('{BUILD_DIR}', stem),
+    if (featureFlags.isRecordUseEnabled)
+      for (final String name in _recordedUsesFileNames) Source.pattern('{BUILD_DIR}/$name'),
     if (_hasWebContentHash) ...<Source>[
       const Source.pattern('{OUTPUT_DIR}/index.html', optional: true),
       const Source.pattern('{OUTPUT_DIR}/flutter_bootstrap.js', optional: true),
@@ -1182,7 +1207,8 @@ class WebReleaseBundle extends Target {
 
   @override
   List<Source> get outputs => <Source>[
-    ...buildPatternStems.map((String file) => Source.pattern('{OUTPUT_DIR}/$file')),
+    for (final String stem in buildPatternStems)
+      Dart2WebTarget._artifactSource('{OUTPUT_DIR}', stem),
     if (_hasWebContentHash) ...<Source>[
       const Source.pattern('{OUTPUT_DIR}/index.html'),
       const Source.pattern('{OUTPUT_DIR}/flutter_bootstrap.js'),
@@ -1572,7 +1598,8 @@ $supportsDart2WasmLine''';
       const Source.pattern('{BUILD_DIR}/main.dart.support.js', optional: true),
     if (compileTargets != null)
       for (final Dart2WebTarget target in compileTargets!)
-        for (final String stem in target.buildPatternStems) Source.pattern('{BUILD_DIR}/$stem'),
+        for (final String stem in target.buildPatternStems)
+          Dart2WebTarget._artifactSource('{BUILD_DIR}', stem),
   ];
 
   @override

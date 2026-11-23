@@ -97,42 +97,35 @@ class BuildWebCommand extends BuildSubCommand {
     final bool? minifyWasm = getValue(WebOptions.minifyWasm);
     final bool? deprecatedJsInterop = getValue(WebOptions.deprecatedJsInterop);
 
-    final List<WebCompilerConfig> compilerConfigs;
-
     if (useWasm) {
       if (webRenderer != WebRendererMode.getDefault(useWasm: true)) {
         throwToolExit(
-          'Do not attempt to set a web renderer when using "--${FlutterOptions.kWebWasmFlag}"',
+          'Do not attempt to set a web renderer when using "--${WebOptions.wasm.name}" '
+          'or "--${WebOptions.wasmOnly.name}".',
         );
       }
       logger.printBox(title: 'New feature', '''
   WebAssembly compilation is new. Understand the details before deploying to production.
   $kWasmMoreInfo''');
+    }
 
-      compilerConfigs = <WebCompilerConfig>[
-        WasmCompilerConfig(
-          optimizationLevel: optimizationLevel,
-          stripWasm: getValue(WebOptions.stripWasm),
-          sourceMaps: sourceMaps,
-          webContentHash: webContentHash,
-          minify: minifyWasm,
-          enableWasmDeferredLoading: getValue(WebOptions.enableWasmDeferredLoading),
-        ),
-        if (!wasmOnly)
-          JsCompilerConfig(
-            csp: getValue(WebOptions.csp),
-            dumpInfo: getValue(WebOptions.dumpInfo),
-            minify: minifyJs,
-            nativeNullAssertions: getValue(CommonOptions.nativeNullAssertions),
-            useFrequencyBasedMinification: !getValue(WebOptions.noFrequencyBasedMinification),
-            optimizationLevel: jsOptimizationLevel,
+    final bool wasmDryRun = !useWasm && getValue(WebOptions.wasmDryRun);
+    final WasmCompilerConfig? wasmConfig = useWasm || wasmDryRun
+        ? WasmCompilerConfig(
+            optimizationLevel: optimizationLevel,
+            stripWasm: getValue(WebOptions.stripWasm),
             sourceMaps: sourceMaps,
             webContentHash: webContentHash,
-            deprecatedJsInterop: deprecatedJsInterop,
-          ),
-      ];
-    } else {
-      compilerConfigs = <WebCompilerConfig>[
+            minify: minifyWasm,
+            enableWasmDeferredLoading: getValue(WebOptions.enableWasmDeferredLoading),
+            dryRun: wasmDryRun,
+            // dart2js already reports deprecated JS interop imports as errors.
+            omitDeprecatedJsInteropFindings: wasmDryRun && deprecatedJsInterop == false,
+          )
+        : null;
+    final compilerConfigs = <WebCompilerConfig>[
+      if (useWasm) ?wasmConfig,
+      if (!wasmOnly)
         JsCompilerConfig(
           csp: getValue(WebOptions.csp),
           dumpInfo: getValue(WebOptions.dumpInfo),
@@ -143,23 +136,10 @@ class BuildWebCommand extends BuildSubCommand {
           sourceMaps: sourceMaps,
           webContentHash: webContentHash,
           deprecatedJsInterop: deprecatedJsInterop,
-          renderer: webRenderer,
+          renderer: useWasm ? WebRendererMode.defaultForJs : webRenderer,
         ),
-
-        if (getValue(WebOptions.wasmDryRun))
-          WasmCompilerConfig(
-            optimizationLevel: optimizationLevel,
-            stripWasm: getValue(WebOptions.stripWasm),
-            sourceMaps: sourceMaps,
-            webContentHash: webContentHash,
-            minify: minifyWasm,
-            enableWasmDeferredLoading: getValue(WebOptions.enableWasmDeferredLoading),
-            dryRun: true,
-            // dart2js already reports deprecated JS interop imports as errors.
-            omitDeprecatedJsInteropFindings: deprecatedJsInterop == false,
-          ),
-      ];
-    }
+      if (wasmDryRun) ?wasmConfig,
+    ];
 
     final BuildInfo buildInfo = await getBuildInfo();
     final String? baseHref = getValue(WebOptions.baseHref);

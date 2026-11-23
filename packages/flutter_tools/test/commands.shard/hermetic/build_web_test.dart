@@ -688,7 +688,7 @@ void main() {
         expect(configs.single.compileTarget, CompileTarget.wasm);
         expect(configs.single.renderer, WebRendererMode.skwasm);
         expect((configs.single as WasmCompilerConfig).dryRun, isFalse);
-        expect(environment.defines['WebWasmOnly'], 'true');
+        expect(environment.defines[kWebWasmOnly], 'true');
       }),
     );
     setupFileSystemForEndToEndTest(fileSystem);
