@@ -78,7 +78,8 @@ class BuildWebCommand extends BuildSubCommand {
     final List<String> dartDefines = extractDartDefines(
       defineConfigJsonMap: extractDartDefineConfigJsonMap(),
     );
-    final bool useWasm = getValue(WebOptions.wasm);
+    final bool wasmOnly = getValue(WebOptions.wasmOnly);
+    final bool useWasm = wasmOnly || getValue(WebOptions.wasm);
     // See also: RunCommandBase.webRenderer and TestCommand.webRenderer.
     final webRenderer = WebRendererMode.fromDartDefines(dartDefines, useWasm: useWasm);
 
@@ -117,17 +118,18 @@ class BuildWebCommand extends BuildSubCommand {
           minify: minifyWasm,
           enableWasmDeferredLoading: getValue(WebOptions.enableWasmDeferredLoading),
         ),
-        JsCompilerConfig(
-          csp: getValue(WebOptions.csp),
-          dumpInfo: getValue(WebOptions.dumpInfo),
-          minify: minifyJs,
-          nativeNullAssertions: getValue(CommonOptions.nativeNullAssertions),
-          useFrequencyBasedMinification: !getValue(WebOptions.noFrequencyBasedMinification),
-          optimizationLevel: jsOptimizationLevel,
-          sourceMaps: sourceMaps,
-          webContentHash: webContentHash,
-          deprecatedJsInterop: deprecatedJsInterop,
-        ),
+        if (!wasmOnly)
+          JsCompilerConfig(
+            csp: getValue(WebOptions.csp),
+            dumpInfo: getValue(WebOptions.dumpInfo),
+            minify: minifyJs,
+            nativeNullAssertions: getValue(CommonOptions.nativeNullAssertions),
+            useFrequencyBasedMinification: !getValue(WebOptions.noFrequencyBasedMinification),
+            optimizationLevel: jsOptimizationLevel,
+            sourceMaps: sourceMaps,
+            webContentHash: webContentHash,
+            deprecatedJsInterop: deprecatedJsInterop,
+          ),
       ];
     } else {
       compilerConfigs = <WebCompilerConfig>[

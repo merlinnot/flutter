@@ -168,6 +168,12 @@ abstract final class WebOptions {
     help: 'Compile to WebAssembly (with fallback to JavaScript).\n$kWasmMoreInfo',
   );
 
+  static const wasmOnly = FlagOptionDescriptor(
+    name: 'wasm-only',
+    negatable: false,
+    help: 'Compile to WebAssembly without a JavaScript fallback.',
+  );
+
   static const stripWasm = FlagOptionDescriptor(
     name: 'strip-wasm',
     defaultsTo: true,
@@ -382,6 +388,7 @@ class WebWasmOptionsBundle extends OptionBundle {
   @override
   List<OptionDescriptor<Object?>> get descriptors => const <OptionDescriptor<Object?>>[
     WebOptions.wasm,
+    WebOptions.wasmOnly,
     WebOptions.stripWasm,
     WebOptions.minifyWasm,
     WebOptions.enableWasmDeferredLoading,

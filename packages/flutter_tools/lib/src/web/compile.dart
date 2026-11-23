@@ -98,6 +98,8 @@ class WebBuilder {
     final migration = ProjectMigration(migrators);
     await migration.run();
 
+    final bool wasmOnly =
+        compilerConfigs.length == 1 && compilerConfigs.single.compileTarget == CompileTarget.wasm;
     final String buildSettingsString = _buildEventAnalyticsSettings(configs: compilerConfigs);
     final Status status = logger.startProgress('Compiling $target for the Web...');
     final sw = Stopwatch()..start();
@@ -117,6 +119,7 @@ class WebBuilder {
               .childDirectory('.dart_tool')
               .childDirectory('flutter_build'),
           defines: <String, String>{
+            if (wasmOnly) 'WebWasmOnly': 'true',
             kTargetFile: target,
             kHasWebPlugins: hasWebPlugins.toString(),
             kBaseHref: ?baseHref,
@@ -178,7 +181,11 @@ class WebBuilder {
     );
 
     final Duration elapsedDuration = sw.elapsed;
-    final variableName = compilerConfigs.length > 1 ? 'dual-compile' : 'dart2js';
+    final String variableName = switch (compilerConfigs) {
+      [WasmCompilerConfig()] => 'dart2wasm',
+      [JsCompilerConfig()] => 'dart2js',
+      _ => 'dual-compile',
+    };
     _analytics.send(
       Event.timing(
         workflow: 'build',
